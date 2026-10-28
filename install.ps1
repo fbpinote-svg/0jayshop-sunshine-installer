@@ -20,6 +20,11 @@ param(
     [ValidateSet('', 'update', 'clean')]
     [string]$Mode = 'clean',
     [string]$ShopConfig = '',
+    # Two gzip+base64 strings: sunshine.conf, then sunshine_state.json. The real
+    # shop config travels inside the pasted command (on the operator's machines),
+    # never on GitHub. The same pair works on every machine - each one picks its
+    # own profile by matching its IP.
+    [string[]]$ShopConfigB64 = @(),
     [string]$Target = '',
     [switch]$DryRun
 )
@@ -162,7 +167,28 @@ New-Item -ItemType Directory -Force -Path $Target | Out-Null
 Copy-Item -Path (Join-Path $staging 'Sunshine\*') -Destination $Target -Recurse -Force
 if (-not (Test-Path (Join-Path $Target 'sunshine.exe'))) { Say '  Copy failed.' 'Red'; Done 1 }
 
-# --- seed the REAL shop config from the operator's file (never from GitHub) ---
+# --- seed the REAL shop config, embedded in the command (never from GitHub) ---
+if ($ShopConfigB64.Count -ge 1) {
+    Say ''
+    Say '--- seeding the real shop config (embedded) ---' 'Cyan'
+    $cfgDir = Join-Path $Target 'config'
+    New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+    function Write-Gz([string]$name, [string]$b64) {
+        $in = New-Object IO.MemoryStream(, [Convert]::FromBase64String($b64))
+        $gz = New-Object IO.Compression.GzipStream($in, [IO.Compression.CompressionMode]::Decompress)
+        $out = New-Object IO.MemoryStream; $gz.CopyTo($out); $gz.Dispose()
+        [IO.File]::WriteAllBytes((Join-Path $cfgDir $name), $out.ToArray())
+    }
+    $names = @('sunshine.conf', 'sunshine_state.json')
+    $seeded = @()
+    for ($i = 0; $i -lt $ShopConfigB64.Count -and $i -lt 2; $i++) {
+        if ($ShopConfigB64[$i]) { Write-Gz $names[$i] $ShopConfigB64[$i]; $seeded += $names[$i] }
+    }
+    Say "  OK   seeded: $($seeded -join ', ')" 'Green'
+    LogLine "seeded(embedded) $($seeded -join ',')"
+}
+
+# --- or seed the REAL shop config from a file / USB (never from GitHub) -------
 if ($ShopConfig) {
     Say ''
     Say '--- seeding the real shop config ---' 'Cyan'
@@ -230,10 +256,10 @@ else { Say "  Install failed. Check $log" 'Red'; $code = 1 }
 Test-VirtualDisplay
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
-if (-not $ShopConfig) {
+if (-not $ShopConfig -and $ShopConfigB64.Count -eq 0) {
     Say ''
     Say '  No shop config was seeded. This machine will show the first-run' 'Yellow'
     Say '  web setup. To push the real IP map and login, re-run with' 'Yellow'
-    Say '  -ShopConfig pointing at your config file on USB.' 'Yellow'
+    Say '  -ShopConfigB64 (embedded) or -ShopConfig (a file on USB).' 'Yellow'
 }
 Done $code

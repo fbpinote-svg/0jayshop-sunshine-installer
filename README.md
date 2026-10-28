@@ -51,3 +51,11 @@ reboot. Do not install while a customer is streaming.
 
 The program is Sunshine (GPL-3.0), via Sunshine-Foundation and
 foundation-sunshine. This installer script is under the same license.
+
+## Rolling out to the whole shop
+
+The same config works on every machine (each picks its profile by its own IP),
+so the same one-liner installs any of them. Embed the config in the command with
+`-ShopConfigB64` (two gzip+base64 strings: `sunshine.conf`, then
+`sunshine_state.json`). The config rides inside the pasted command, never on
+GitHub; only the generic program is downloaded here.
