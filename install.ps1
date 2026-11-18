@@ -32,9 +32,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # --- what to fetch (filled in when the release is published) ------------------
-$Version      = 'v1.0.0-beta.4'
-$ZipUrl       = 'https://github.com/fbpinote-svg/0jayshop-sunshine-installer/releases/download/v1.0.0-beta.4/Sunshine-v1.0.0-beta.4-public.zip'
-$ZipSha256    = '7e2d2e0e4e576d3e90ced19241f8120be7cf29ed23f376f5771bde3a0c3f36e5'
+$Version      = 'v1.0.0-beta.7'
+$ZipUrl       = 'https://github.com/fbpinote-svg/0jayshop-sunshine-installer/releases/download/v1.0.0-beta.7/Sunshine-v1.0.0-beta.7-public.zip'
+$ZipSha256    = '09cfaf91d597e34a648d31ad663d8759d66083da2f65d27bc29ac5bf2ce20fe1'
 
 function Say([string]$m, [string]$c = 'Gray') { Write-Host $m -ForegroundColor $c }
 function Done([int]$code) {
@@ -92,8 +92,11 @@ function Find-Installed {
             $dir = [IO.Path]::GetDirectoryName($dir)
         }
     }
+    foreach ($p in @(Get-Process sunshine -ErrorAction SilentlyContinue)) {
+        if ($p.Path) { return [IO.Path]::GetDirectoryName($p.Path) }
+    }
     $c = @(Get-ChildItem -LiteralPath 'C:\Users' -Directory -ErrorAction SilentlyContinue |
-        ForEach-Object { [IO.Path]::Combine($_.FullName, 'Sunshine') }) + @('C:\Sunshine')
+        ForEach-Object { [IO.Path]::Combine($_.FullName, 'Sunshine') }) + @('C:\0JayShop\Sunshine', 'C:\Sunshine')
     foreach ($x in $c) { if ([IO.File]::Exists([IO.Path]::Combine($x, 'sunshine.exe'))) { return $x } }
     return $null
 }
@@ -245,6 +248,49 @@ function Test-VirtualDisplay {
     else { Say '  Still missing. Photograph this window for the developer.' 'Red' }
 }
 
+# --- the four drivers ---------------------------------------------------------
+# Same tests as the control panel's Device software page and the setup exe:
+# only present devices count, the virtual mouse needs a working HID mouse
+# (mouhid) under it, ViGEmBus must be 1.17 or newer. Returns how many are not OK.
+function Show-Drivers {
+    Say ''
+    Say '--- drivers ---' 'Cyan'
+    $all = $null
+    try { $all = @(Get-PnpDevice -PresentOnly -ErrorAction Stop) } catch { }
+    if ($null -eq $all) { Say '  could not read the device list' 'Yellow'; return 0 }
+    function Ver([string]$id) { try { return [string](Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_DriverVersion -ErrorAction Stop).Data } catch { return '' } }
+    $rows = @()
+    $vdd = @($all | Where-Object { $ids = @($_.HardwareID); ($ids -contains 'Root\ZakoVDD') -or ($ids -contains 'ZakoVDD') })
+    $rows += , @('Virtual display (Zako VDD)', $vdd, { param($d) $d.Status -eq 'OK' })
+    $mouse = @($all | Where-Object { @($_.HardwareID) -contains 'Root\ZakoVirtualMouse' })
+    $rows += , @('Virtual mouse (Zako Virtual Mouse)', $mouse, {
+        param($d)
+        if ($d.Status -ne 'OK') { return $false }
+        $kids = $null
+        try { $kids = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName DEVPKEY_Device_Children -ErrorAction Stop).Data } catch { }
+        if (-not $kids) { return $false }
+        return @($all | Where-Object { ($kids -contains $_.InstanceId) -and $_.Service -eq 'mouhid' -and $_.Status -eq 'OK' }).Count -gt 0
+    })
+    $pad = @($all | Where-Object { ((@($_.HardwareID) -join ',') -match 'ViGEm') -or ($_.FriendlyName -like '*Virtual Gamepad Emulation*') })
+    $rows += , @('Gamepad (ViGEmBus)', $pad, {
+        param($d)
+        $v = $null
+        return ($d.Status -eq 'OK') -and [version]::TryParse((Ver $d.InstanceId), [ref]$v) -and ($v -ge [version]'1.17')
+    })
+    $mic = @($all | Where-Object { $_.Class -eq 'AudioEndpoint' -and $_.FriendlyName -like '*VB-Audio Virtual Cable*' })
+    $rows += , @('Virtual mic (VB-CABLE)', $mic, { param($d) $d.Status -eq 'OK' })
+    $bad = 0
+    foreach ($r in $rows) {
+        $name = $r[0]; $devs = @($r[1] | Where-Object { $null -ne $_ }); $works = $r[2]
+        if ($devs.Count -eq 0) { Say ("  {0,-36} MISSING" -f $name) 'Red'; $bad++; continue }
+        $ok = @($devs | Where-Object { & $works $_ })
+        if ($ok.Count -gt 0) { Say ("  {0,-36} OK" -f $name) 'Green' }
+        else { Say ("  {0,-36} NOT WORKING (status {1})" -f $name, $devs[0].Status) 'Red'; $bad++ }
+    }
+    if ($bad -gt 0) { Say '  Some drivers are missing. Restart Windows if asked, then run the command again.' 'Yellow' }
+    return $bad
+}
+
 # --- verdict by result, not by a batch file exit code -------------------------
 Say ''
 $placed = Test-Path (Join-Path $Target 'sunshine.exe')
@@ -253,6 +299,8 @@ if ($placed -and $svc -and $svc.Status -eq 'Running') { Say '  OK   installed an
 elseif ($placed) { Say "  Installed, but the service is $(if($svc){$svc.Status}else{'missing'}). Check $log" 'Yellow'; $code = 2 }
 else { Say "  Install failed. Check $log" 'Red'; $code = 1 }
 
+$missing = Show-Drivers
+if ($code -eq 0 -and $missing -gt 0) { $code = 3 }
 Test-VirtualDisplay
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 

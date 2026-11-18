@@ -16,8 +16,12 @@ right-click, Run as administrator).
 2. **Checks its SHA256 against a value pinned inside `install.ps1`** — a tampered
    or intercepted download is refused before the machine is touched.
 3. Removes any previous Sunshine, lays the new build down, runs the portable
-   installer and the service.
-4. Checks that the virtual display can actually create monitors (the
+   installer and the service. The portable installer puts in all four drivers
+   the shop needs: virtual display (ZakoVDD), virtual mouse (Zako Virtual
+   Mouse), gamepad (ViGEmBus) and virtual mic (VB-CABLE).
+4. Lists those four drivers as OK / MISSING / NOT WORKING (exit code 3 when one
+   is not OK).
+5. Checks that the virtual display can actually create monitors (the
    `IndirectKmd` problem) and offers the known fix.
 
 ## The shop config is not in this repo
