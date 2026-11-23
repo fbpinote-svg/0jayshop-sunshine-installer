@@ -32,9 +32,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # --- what to fetch (filled in when the release is published) ------------------
-$Version      = 'v1.0.0-beta.12'
-$ZipUrl       = 'https://github.com/fbpinote-svg/0jayshop-sunshine-installer/releases/download/v1.0.0-beta.12/Sunshine-v1.0.0-beta.12-public.zip'
-$ZipSha256    = '0aa49dd761f8c746bde173702987cedddf6ad546c306e117c650ab788e00a35c'
+$Version      = 'v1.0.0-beta.13'
+$ZipUrl       = 'https://github.com/fbpinote-svg/0jayshop-sunshine-installer/releases/download/v1.0.0-beta.13/Sunshine-v1.0.0-beta.13-public.zip'
+$ZipSha256    = '5e99d1e0aed77c5d09aae0b0df34841b5ea7780810e7059b1d4b573a4c0ffa56'
 
 function Say([string]$m, [string]$c = 'Gray') { Write-Host $m -ForegroundColor $c }
 function Done([int]$code) {
